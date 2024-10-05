@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload Video to Cloudflare Stream</title>
+  <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 50px;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      align-items: center;  /* จัดให้ปุ่มอยู่ตรงกลางแนวนอน */
+    }
+    input[type="file"] {
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px; /* ปรับขนาดของปุ่มเพื่อความสมดุล */
+      background-color: #007BFF;
+      border: none;
+      color: white;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      word-break: break-all;
+    }
+    .video-js {
+  width: 100%;           /* ให้วิดีโอมีความกว้างเต็มพื้นที่ */
+  height: auto;          /* ความสูงอัตโนมัติ */
+  max-width: 100%;       /* ป้องกันการขยายเกิน container */
+  max-height: 250px;     /* จำกัดความสูงสูงสุดที่ 500px */
+}
+
+.vjs-fluid {
+  padding-top: 56.25%;   /* อัตราส่วน 16:9 */
+}
+.video-js.vjs-fluid{
+  width: 50%;
+}
+
+.my-video-dimensions.vjs-fluid:not(.vjs-audio-only-mode) {
+    padding-top: 35%;
+}
+
+.video-js .vjs-big-play-button {
+  top: 50%;
+  left: 44%;
+}
+
+.video-container {
+    display: flex;
+    justify-content: center; /* จัดแนวนอนกึ่งกลาง */
+    align-items: center;    /* จัดแนวตั้งกึ่งกลาง */
+    height: 100vh;          /* ให้ความสูงของ container เท่ากับ viewport */
+  }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Upload Video Cloudflare Stream</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" name="file" accept="video/*" required />
+      <button type="submit">Upload</button>
+    </form>
+    <div id="result" class="result" style="display: none;"></div>
+
+  
+  </div>
+<!-- <div class="video-container">
+  <video
+  id="my-video"
+  class="video-js vjs-fluid"
+  controls
+  preload="auto"
+  data-setup='{}'>
+  <source src="https://customer-xklid2oln4a76gku.cloudflarestream.com/1afd14a3819e4be3bf5a3fcc933bb756/manifest/video.m3u8" type="application/x-mpegURL" />
+  <p class="vjs-no-js">
+    To view this video please enable JavaScript, and consider upgrading to a
+    web browser that
+    <a href="https://videojs.com/html5-video-support/" target="_blank">
+      supports HTML5 video
+    </a>
+  </p>
+</video>
+</div> -->
+
+
+  <!-- Include the Video.js JavaScript -->
+  <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(form);
+      resultDiv.style.display = 'none';
+      resultDiv.innerHTML = '';
+
+      try {
+        const response = await fetch('/video/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          resultDiv.style.display = 'block';
+          resultDiv.innerHTML = `
+            <p><strong>Message:</strong> ${data.message}</p>
+            <p><strong>Video ID:</strong> ${data.videoId}</p>
+            <p><strong>Playback URL:</strong> <a href="${data.playbackUrl}" target="_blank">${data.playbackUrl}</a></p>
+           
+          `;
+
+          // Initialize Video.js
+          // videojs(document.getElementById('my-video'));
+        } else {
+          throw new Error(data.message || 'Upload failed');
+        }
+      } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<p style="color: red;"><strong>Error:</strong> ${error.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>
