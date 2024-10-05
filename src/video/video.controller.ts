@@ -4,20 +4,19 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Res,
   Get,
-  Param,
+  Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CloudflareStreamService } from '../cloudflare-stream/cloudflare-stream.service';
 import { join } from 'path';
 import { Response } from 'express';
 import { VideoService } from './video.service';
-import * as tus from 'tus-js-client';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-
+import { UploadResponseDto } from './dto/upload-response.dto';
+import { ServiceType } from '../enums/ServiceTypeEnum';
 import { ConfigService } from '@nestjs/config';
 
 @Controller('video')
@@ -36,74 +35,45 @@ export class VideoController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadVideo(@UploadedFile() file: Express.Multer.File) {
-    console.time('uploadTime');
+  async uploadVideo(@UploadedFile() file: Express.Multer.File,@Body() body: any): Promise<UploadResponseDto> { 
+    console.log(body);
+    console.log(file);
+
     if (!file) {
       throw new BadRequestException('File is not provided');
     }
-    console.log(file);
-    // return;
-    const fileBuffer = file.buffer;
-    const tempFilePath = path.join(os.tmpdir(), 'tempfile.mp4');
-    fs.writeFileSync(tempFilePath, fileBuffer);
 
-    // สร้าง stream จากไฟล์ที่เราเขียน
-    const fileUpload = fs.createReadStream(tempFilePath);
-    const size = fs.statSync(tempFilePath).size;
-    let mediaId = '';
+ 
+    try {
 
-    const options = {
-      endpoint: `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/stream`,
-      headers: {
-        Authorization: `Bearer ${this.apiToken}`,
-      },
-      chunkSize: 100 * 1024 * 1024, // ใช้ chunk ขนาด 200 MB
-      retryDelays: [0, 3000, 5000, 10000, 20000], // เวลารอเมื่อเกิดความล้มเหลวในการอัปโหลด
-      metadata: {
-        name: file.originalname,
-        filetype: file.mimetype,
-      },
-      uploadSize: size,
-      onError: function (error) {
-        throw error;
-      },
-      onProgress: function (bytesUploaded, bytesTotal) {
-        const percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(2);
-        console.log(bytesUploaded, bytesTotal, percentage + '%');
-      },
-      onSuccess: function () {
-        console.log('Upload finished');
-        console.timeEnd('uploadTime');
-        // ลบไฟล์ชั่วคราวเมื่อการอัปโหลดสำเร็จ
-        fs.unlinkSync(tempFilePath);
-      },
-      onAfterResponse: function (req, res): Promise<void> {
-        return new Promise((resolve) => {
-          const mediaIdHeader = res.getHeader('stream-media-id');
-          if (mediaIdHeader) {
-            mediaId = mediaIdHeader;
-          }
+      if(body.service === ServiceType.CLOUDFLARE){
+      const uploadResult = await this.cloudflareStreamService.uploadTusProtocolVideo(file);
+      return {
+        message: uploadResult.message,
+        videoId: uploadResult.videoId
+      };
+    }
 
-          resolve();
-        });
-      },
-    };
+    } catch (error) {
+      throw new HttpException(
+        'Video upload failed',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
-    const upload = new tus.Upload(fileUpload, options);
-    upload.start();
+  }
 
-    console.log(upload);
-
-    return;
-
-    const uploadResult = await this.cloudflareStreamService.uploadVideo(file);
-    console.log(uploadResult);
-
-    return {
-      message: 'Video uploaded successfully',
-      videoId: uploadResult.result.uid,
-      playbackUrl: uploadResult.result.playback.hls,
-    };
+  @Get('verify-token')
+  async verifyToken(): Promise<any> {
+    try {
+      const result = await this.cloudflareStreamService.getToken();
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        'Token verification failed',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
   }
 
   async getSignedVideoUrl(videoId: string) {
